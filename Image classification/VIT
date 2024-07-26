@@ -1,0 +1,37 @@
+# AN IMAGE IS WORTH 16X16 WORDS:TRANSFORMERS FOR IMAGE RECOGNITION AT SCALE
+
+## ABSTRACT
+
+트랜스포머는 NLP의 표준이 되었지만 CV에 적용하는데는 여전히 제한적이다.
+
+## INTRODUCTION
+
+NLP의 트랜스포머 스케일링 성공에 영감을 받아, 우리는 표준 트랜스포머를 이미지에 직접 적용하되 수정을 최소화하는 실험을 하고 있다.
+이를 위해 이미지를 패치로 분할하고 이러한 패치의 선형 임베딩 시퀀스를 Transformer에 대한 입력을 제공한다. 
+VIT응 중간 규모 데이터 세트에서 훈련할 때 비슷한 크기의 ResNet보다 몇 퍼센트 포인트 낮은 적당한 정확도를 생성한다.
+번역 등분산(translation equivariance) 및 지역성(locality)과 같이 inductive biases를 CNN 아키텍쳐는 내재하고 있기 때문
+하지만 대규모 데이터 훈련이 inductive bias를 능가한다는 사실을 발견했다.
+
+## RELATED WORK
+BERT는 노이즈 제거 작업을 사용하는 반면, GPT 작업 라인은 언어 모델링을 사전 학습 작업으로 사용한다.
+이미지 모든 픽셀에 self-attention을 적용하면 N^2 배로 계산 코스트가 증가한다. 
+
+## METHOD
+
+VIT
+표준 트랜스포머는 토큰 임베딩의 1D 시퀀스를 입력으로 받는다.
+[H,W,C] -> [N*(P^2 * C)]
+패치의 수 N = HW/P^2 -> 트랜스포머의 입력 시퀀스 길이
+이 각 패치들을 flatten해서 mlp로 학습 가능하도록 만들고 D차원으로 embedding한다.
+클래스 토큰을 concat해주고 시퀀스 길이를 N+1로 만든 다음, pos_embedding(N+1,D)을 더해준다. 
+-> encoder의 입력 역할을 한다.
+
+Inductive bias
+ CNN에서는 지역성, 2차원 이웃 구조 및 변환 등분산이 전체 모델의 각 계층에 깔려있다. 
+ViT에서는 MLP 계층만 로컬이고 변환상 등변(translationally equivariant)인 반면, 셀프-어텐션 계층은 글로벌적이다. 
+
+초기화 시 위치 임베딩은 패치의 2D 위치에 대한 정보를 전달하지 않으며 패치 간의 모든 공간 관계는 처음부터 학습해야 한다. 
+
+하이브리드 아키텍처는 ViT에서 원시 이미지 패치 대신, CNN을 통해 추출한 특징 맵을 입력으로 사용하여, 
+트랜스포머 모델의 입력 시퀀스를 구성하는 방식이다. 
+이 방법은 CNN의 강력한 특징 추출 능력을 활용하면서도, ViT의 전역적 특성 학습 능력을 결합하는 접근법이다.

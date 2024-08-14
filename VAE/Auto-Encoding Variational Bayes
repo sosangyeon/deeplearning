@@ -1,0 +1,107 @@
+method
+연속 잠재 변수가 있는 다양한 방향성 모델에 대한 lower bound estimator 도출
+매개 변수에 대해 ML, MAP를 수행하고, intractable posterior을 variational approximation인 정규분포로 근사한다.
+
+2.1 problem scenario
+continuous or discrete variable한 데이터 세트를 고려
+이 데이터들은 어떠한 random process(unobseved 연속 확률 변수 z를 포함하는)에 의해 생성된다고 가정한다.
+이 과정은 두 단계로 구성된다.
+(1) z ~ Pθ(z) 
+(2) x ~ Pθ(x|z) 
+Pθ(z)와 Pθ(x|z), -> PDFs are differentiable almost everywhere
+
+Very importantly, we do not make the common simplifying assumptions about the marginal or posterior probabilities.
+we are here interested in a general algorithm that even works efficiently
+
+1. integral of the marginal likelihood pθ(x) is intractable. These intractabilities are quite common
+and appear in cases of moderately complicated likelihood functions pθ(x|z).
+
+2. we have so much data that batch optimization is too costly
+
+위의 문제를 해결하기 위해 다루기 어려운 실제 사후 pθ(z|x)에 대한 근사치인 인식 모델 qφ(z|x)을 소개
+
+(*Mean-Field Variational Inference : 각 잠재 변수 z_i가 서로 독립적이라고 가정하고, 전체 분포는 각 개별 분포의 곱으로 표현)
+parameters φ are not computed from some closed-form expectation.
+
+코딩 이론 관점에서, 잠재 변수 z는 데이터 x의 "코드" 또는 "잠재 표현"으로 간주.
+따라서 이 논문에서는 인식 모델 qφ(z|x)를 확률적 인코더라고도 하는데, 
+이는 데이터 포인트 x가 주어지면 데이터 포인트 x가 생성될 수 있는 코드 z의 가능한 값에 대한 분포를 생성하기 때문이다.
+비슷한 맥락에서 pθ(x|z)를 확률적 디코더라고 부르는데, 코드 z가 주어지면 x의 가능한 해당 값에 대한 분포를 생성하기 때문이다.
+
+2.2 The variational bound
+The marginal likelihood is composed of a sum over the marginal likelihoods of individual datapoints.
+log pθ(x(i)) = DKL(qφ(z|x(i))||pθ(z|x(i))) + L(θ, φ; x(i)) 
+첫번째 항은, 실제 poterior으로부터 근사 분포의 KL divergence 항이다. (qφ(z|x(i)) 근사 분포, pθ(z|x(i)) 실제 분포, 두 분포를 유사하게 만든다.)
+두번재 항은, datapoint i의 lower bound on the marginal likelihood 이다.
+
+그런데 pθ(z∣x) 분포를 모른다고 했는데 어떻게 KL term을 계산할까?
+L(θ, φ; x(i)) = −DKL(qφ(z|x(i))||pθ(z)) + Eqφ(z|x(i))[logpθ(x(i)|z)] 
+We want to differentiate and optimize the lower bound L(θ, φ; x(i)) 
+ELBO를 최대화를 통해 pθ(z∣x)의 어려움으로부터 벗어났다.
+
+-> 변분 추론에서, lower bound φ와 θ에 대해 최적화하고자 할 때, φ에 대한 기울기를 계산하는 것이 문제
+Monte Carlo gradient estimator는 기울기를 계산하는 데 사용되지만, 이 estimator는 높은 분산을 가지므로 
+이러한 높은 분산을 해결할 수 있는 더 안정적인 방법이나 기법이 필요하다.
+
+2.3 The SGVB estimator and AEVB algorithm
+approximate posterior qφ(z|x) we can reparameterize the random variable ez ∼ qφ(z|x) using a differentiable transformation gφ(e, x)
+of an (auxiliary) noise variable e
+-> z(i,l) = gφ(e(i,l), x(i)) and e(l) ∼ p(e)
+
+1) KL divergence : −DKL(qφ(z|x(i))||pθ(z))
+KL 발산을 분석적으로 계산할 수 있다.
+
+(논문에서 자주 등장하는 용어 'intractable posterior distribution'에서 "intractable"의 의미가 무엇일까?
+적분식이 closed form 이 아닌 경우 intractable 하다고 표현한다.
+VAE에서 qϕ(z∣x)를 정규분포로 가정한 이유는, KL div를 계산하는 적분식이 closed form이 되어야 하기 때문이다. 
+역전파 알고리즘으로 학습하기 위해선 Loss가 미분가능 해야 한다. 그런데 KL div는 식 자체로 적분이 들어가 있고, 
+그 적분을 closed form으로 풀 수 없으면 미분 계산이 불가능하다. KL div는 정규분포를 제외하곤 미분가능한 경우가 많지 않다.)
+-> z를 샘플링하는 분포를 원하는 모양으로 세팅하지 못하고 정규분포로만 가정해야한다는 점은 VAE의 한계
+
+2) Reconstruction Error : Eqφ(z|x(i))[log pθ(x(i)|z)]
+qϕ(z∣x)에 대해 재구성된 데이터가 실제 데이터와 얼마나 잘 일치하는지를 측정한다. 하지만 이 로그 우도를 직접적으로 계산하는 것은 보통 복잡할 수 있다. 
+따라서, 샘플링을 통해 추정하는 방법이 사용된다. 즉, z의 샘플을 생성하여 이를 이용해 로그 우도를 추정한다.
+샘플링: z를 근사 사후 분포 qϕ(z∣x)에서 샘플링한다.
+재구성 오류 계산: 각 샘플에 대해 logpθ(x∣z)를 계산하고, 이를 평균하여 재구성 오류를 추정한다.
+
+(적분값을 구하기 쉽지 않으므로 몬테카를로 샘플링을 이용한다. 몬테카를로 샘플링은 확률 분포를 모르더라도 샘플링으로 기댓값을 구할 수 있는 방법이다. 
+분포에 상관없이 독립추출만 보장되면, 대수의 법칙에 의해 샘플링 평균값이 기댓값에 수렴한다.)
+
+SGVB (Stochastic Gradient Variational Bayes)
+KL 발산 항은 근사 사후 분포 q ϕ​(z∣x)와 사전 분포 pθ(z) 간의 차이를 줄이도록 유도하며, 이는 모델 파라미터 ϕ를 정규화하여 과적합을 방지한다.
+SGVB 추정기의 두 번째 버전 LeB(θ,ϕ;x(i))는 KL 발산 항을 분석적으로 계산할 수 있을 때 사용되며, 이는 일반적인 추정기보다 변동성이 적고 더 안정적인 결과를 제공한다.
+
+L(θ,ϕ;X)≈LeM(θ,ϕ;X M)= N/M*M∑1 L e(θ,ϕ;x (i))
+: XM은 전체 데이터셋 𝑋에서 무작위로 선택된 𝑀개의 데이터 포인트를 포함하는 미니배치
+실험에서는 데이터 포인트당 샘플 수 𝐿를 1로 설정하고, 미니배치 크기 𝑀를 충분히 크게 설정하면 좋은 성능을 얻을 수 있다고 한다.
+
+2.4 The reparameterization trick
+
+𝑔𝜙: 변환 함수(transformation function)로, 보조 변수 𝜖와 관측 데이터 𝑥를 입력으로 받아 𝑧를 생성합니다. 이 함수는 파라미터 𝜙에 의해 정의된다.
+보조 변수 ϵ는 독립적으로 샘플링되며, 변환 함수 g ϕ는 파라미터 𝜙에 따라 𝑧를 결정된다.
+z=μ+σϵ
+E q ϕ(z∣x)[f(z)]=E p(ϵ)[f(g ϕ(ϵ,x))]
+
+직접적으로 z를 샘플링하고, 이 샘플을 사용하여 기대값을 계산하려고 하면, 그 과정이 미분 불가능할 수 있다.
+이 변환을 통해, Reparameterization Trick을 사용하면, 기대값의 계산이 보조 변수 ϵ의 함수로 표현될 수 있고, 
+이 경우 미분 가능한 방식으로 기울기를 계산할 수 있습니다.
+(기대값의 Monte Carlo 추정이 미분 가능해진다.)
+
+기대값 Eqϕ(z∣x)[f(z)]는 확률 분포 qϕ(z∣x)에 따라 함수 f(z)의 평균값을 나타낸다. 실제로 이를 계산하는 것은 복잡할 수 있으며, 
+특히 확률 분포 qϕ(z∣x)가 복잡할 경우에는 직접 계산이 어려울 수 있다.
+Monte Carlo 추정은 이러한 기대값을 근사하는 방법 중 하나로, 샘플링을 통해 기대값을 추정한다. 
+E q (z∣x)[f(z)]≈ 1/L*1∑L f(z(l))
+
+문제점
+미분 불가능성: Monte Carlo 추정은 샘플링을 포함하기 때문에, 샘플링 과정 자체가 미분 불가능하다. 
+즉, Monte Carlo 샘플링으로 인해 얻은 추정값은 변분 추론에서 파라미터 𝜙에 대해 기울기를 계산하는 데 문제가 될 수 있다.
+
+
+
+
+
+
+
+
+
+

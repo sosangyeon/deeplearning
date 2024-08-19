@@ -1,0 +1,55 @@
+## 1. Stein Score Function
+이전 생성 모델 알고리즘들은 log likelihood의 gradient로 파라미터를 업데이트했다면, score-based 모델과 diffusion 모델은
+학습 데이터 자체의 gradient을 구하는 stein score funciton을 바탕으로 학습을 진행한다. 
+즉, 데이터의 분포를 기준으로 가능도가 높은 방향으로 기울기가 향하도록 유도하는 알고리즘이다. 
+
+에너지 기반 모델은 매개변수에 대해 기울기를 구해야 하기 때문에 Z(Θ)를 계산해야 하지만, 
+점수 기반 모델은 x에 대해 기울기를 구하기 때문에 매개변수에 대한 식인 Z(Θ)을 제거할 수 있다. 
+(Z(Θ)는 존재할 수 있는 모든 데이터에 대해 적분한 값이다.)
+
+-> 기존 생성모델은 매개변수에 대한 기울기 최적화를 진행하지만, 점수 기반 모델은 데이터에 대한 기울기 최적화를 진행한다.
+
+## 2. Score Matching
+sΘ(x) = ▽xlog pΘ(x)을 ▽xlog p{data}(x)에 근사하도록 학습하기 위해 두 확률 분포의 기울기 간의 L2-norm의 차이를 수치화하는 
+Fisher Divergence을 학습 목표로 설정한다.
+(두 분포의 기울기간의 유클리디안 거리의 차이를 가깝게 학습)
+
+그런데 log p{data}(x)를 알지 못하고 특히 ▽xlog p{data}(x)은 더더욱 알기 어렵다. 
+
+기존 학습목표에서 log p{data}(x)를 제거하고 계산할 수 있는 sΘ(x)의 식으로 나타냈고, sΘ(x)만으로 표현한 변형된 
+학습 목표를 Score Matching Objective라고 한다.
+
+하지만 여전히 tr(▽x sΘ(x))을 구하기 어렵다.
+이는 데이터셋 D에 존재하는 모든 데이터에 대해 기울기를 구해야 하기 때문에 고차원의 데이터에 대해서는 연산에 문제가 발생한다.
+
+Denoising Score Matching
+데이터x에 간단한 가우시안 노이즈를 추가해 계산 불가능한 ▽x log p{data}(x)를 계산이 가능한 ▽x log q σ(x)로 식을 변형한다.
+하지만 Denoising Score Matching 방법을 사용하면 확률 분포가 아닌 가우지안 노이즈를 추가한 
+분포에 대해 학습이 이루어지기 때문에, 이 노이지한 분포에서 노이즈를 제외하는 Denoising Process을 적용해야 한다.
+
+## 3. Langevin Dynamics
+데이터셋 [x1,x2,---,xn] ~ Pdata(x)의 샘플들을 scroe matching 학습 목표를 가지고 ▽x log pΘ(x)기 ▽x log p{data}(x)
+에 가까워지도록 학습하고 구한 ▽x log pΘ(x)을 가지고 새로운 샘플을 생성할 수 있다.
+
+Langevin Dynamics에서 마지막 단계의 노이즈는 gradient ascent에 의한 탐색 과정에서 무작위성을 부여하여, 
+모델이 local optima에 머무르지 않고 더 나은 최적점을 찾을 수 있도록 돕는다.
+
+## 4. Annealed Langevin Dynamics
+
+score-based 모델은 하나의 큰 flaw(단점)를 내포하고 있다. 데이터 x가 모든 고차원 공간에 균등하게 분포하지 않는 것이다.
+
+maifold hypothesis은 아무리 고차원의 데이터를 지닌 데이터셋이라도 데이터는 주로 저차원의 maifold(subspace)에 밀집해 있어 
+나머지 space는 거의 비어있다는 가설이다.
+
+점수 기반 모델은 위 가설의 문제를 겪는다. 
+P(x) = 0인 지점에서는 기울기를 구할 수 없기 때문이다. 
+
+manifold hypothesis에서 비롯한 문제를 해결하기 위해 기존 langevin dynamics을 개선한 annealed langevin dynamics을 사용해
+데이터를 생성할 수 있다.
+
+빈 공간이 다수인 데이터 공간에 가우시안 분포를 추가해 임의로 p(X) = 0이 성립하지 않도록 노이즈를 추가한 분포를 가지고 
+학습한 다음에 노이즈를 제거해 원하는 데이터를 추출할 수 있다.
+
+annealed langevin dynamics은 가우시안 노이즈가 추가된 분포부터 시작해 노이즈를 제거하는 과정에 대해 
+langevin dynamics을 진행함으로서 고차원의 데이터에 대해서도 성공적으로 데이터를 생성할 수 있다.
+

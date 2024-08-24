@@ -1,0 +1,73 @@
+Abstract
+SPPnet 및 Fast R-CNN과 같은 발전으로 인해 이러한 탐지 네트워크의 실행 시간이 단축되어 지역 제안 계산이 병목 현상으로 노출되었다. 
+여전히 지역 제안(region proposal) 단계가 전체 객체 탐지 과정에서 가장 시간이 많이 걸리는 부분으로 남아 있었다. 
+즉, CNN이 빠르게 작동하여 특징을 추출하고 객체를 분류하는 동안,
+지역 제안을 생성하는 과정(어떤 영역이 객체를 포함할 가능성이 높은지 찾아내는 과정)은 상대적으로 느려져서 전체 프로세스의 병목 현상(bottleneck)이 된다.
+이 작업에서는 감지 네트워크와 전체 이미지 컨볼루션 기능을 공유하는 RPN을 도입하여 거의 비용 없이 지역 제안을 가능하게 한다.
+RPN은 각 위치에서 객체 경계와 객체성 점수를 동시에 예측하는 완전 컨볼루션 네트워크이다. 
+(RPN은 지역 제안 네트워크로, 이미지 내에서 객체가 있을 가능성이 높은 영역(Region Proposal)을 생성하는 역할)
+RPN과 Fast R-CNN이 별도의 두 단계로 나뉘어 작동하는 것이 아니라, 동일한 컨볼루션 층을 사용해 동시에 처리된다.
+어텐션 메커니즘이 있는 신경망을 사용하는 RPN 구성 요소는 통합 네트워크에 어디를 봐야 하는지 알려준다.
+
+1. Introduction
+객체 감지의 최근 발전은 지역 제안 방법의 성공에 의해 주도되었다. 
+기존의 문제점
+R-CNN(Region-based CNN)에서는 이미지의 각 제안된 영역마다 별도로 CNN을 적용하여 객체를 탐지했다. 
+이로 인해 동일한 이미지에서 여러 번의 중복된 컨볼루션 연산이 발생하게 되어 계산 비용이 매우 높아졌다. 
+공유된 컨볼루션 기법
+공유된 컨볼루션은 이러한 비효율성을 해결하기 위해 제안된 방법이다. 
+이 기법에서는 이미지 전체에 대해 한 번만 컨볼루션 연산을 수행하여 특징 맵(feature map)을 추출한다.
+그런 다음, 각 제안된 영역은 이 공유된 특징 맵에서 필요한 부분을 잘라내어 사용하는 방식으로 진행된다. 즉, 모든 제안된 영역이 동일한 특징 맵을 공유함으로써 중복된 연산을 피할 수 있다.
+
+(Selective Search
+Selective Search 알고리즘은 Segmentation 분야에 많이 쓰이는 알고리즘이며, 객체와 주변간의 색감(Color), 질감(Texture) 차이, 
+다른 물체에 애워 쌓여 있는지(Enclosed) 여부 등을 파악해서 인접한 유사한 픽셀끼리 묶어 물체의 위치를 파악할 수 있도록 하는 알고리즘이다.)
+selective search는 cpu구현에서 이미지당 2초로 훨씬 느리다. region proposal은 여전히 많은 실행 시간을 소비한다. 
+-> 후보 영역 추출을 위해 사용되는 selective search 알고리즘은 cpu상에서 동작하고 이로 인해 네트워크ㅔ서 병목현상이 발생학 된다.
+faster r-cnn은 이러한 문제를 해결하고자 후보 영역 추출 작업을 수행하는 네트워크인 region proposal network를 도입한다.
+
+Region Proposal Networks
+anchor 
+기존의 sliding window 방법은 고정된 크기의 window를 이미지에서 sliding하며 각 window에서 객체를 탐지한다. 이때 고정된 크기의 window를 사용한다는 것은 객체를 탐지할 때,
+객체의 크기들이 다 유사하다는 가정을 하는 것과 마찬가지가 된다. 하지만 객체들은 다 제각각의 크기를 갖고 있으므로 이러한 가정을 통해 object detection을 하게 되면 좋은 결과를 얻기 어렵다.
+RPN은 region proposals를 보다 정교하게 추출하기 위해 다양한 크기와 가로세로비를 가지는 bounding box인 anchor box를 도입한다. 
+faster r-cnn 모델을 간략하게 보면 rpn과 fast r-cnn 모델이 합쳐졌다고 볼 수 있다. 
+rpn에서 region proposals를 추출하고 이를 fast r-cnn 네트워크에 전달하여 객체의 class와 위치를 예측한다.
+이를 통해 모델의 전체 과정이 gpu 상에서 동작하여 병목 현상이 발생하지 않으며, end-to-end로 네트워크를 학습시키는 것이 가능해졌다.
+
+순서
+1)원본 이미지를 cnn모델에 입력하여 feature map을 얻는다.
+2)feature map은 rpn에 전달되어 적절한 region proposals을 산출한다.
+3)region proposals와 1)과정에서 얻은 feature map을 통해 pooling을 수행해 고정된 크기의 feature map을 얻는다.
+4)fast r-cnn모델에 고정된 크깅의 feature map을 입력하여 classification과 bounding box regression을 수행한다.
+
+sharing feature for rpn and fast rcnn
+selective search를 통해 rol을 받는 것이 아니라 rpn을 토앻 rol을 받는다. 이때, 모든 anchor를 rol로 설정하는 것이 아니라 non-maximum suppression을 사용해 2000개의 rol들만 이용한다.
+
+1. feature extraction by pre-trained VGG-16
+pre-trained된 VGG-16 모델에 800x800x3크깅의 원본 이미지를 입력하여 50x50x512 크기의 feature map을 얻는다.
+2. Generate Anchors by Anchor generation layer
+Region proposals를 추출하기에 앞서 원본 이미지에 대하여 anchor box를 생성하는 과정이 필요하다. 
+원본 이미지의 크기에 sub-sampling ratio를 곱한만큼의 grid cell이 생성 되며, 이를 기준으로 각 grid cell마다 9개의 anchor box를 생성한다. 
+즉, 원본 이미지에 50x50(=800x1/16 x 800x1/16)개의 grid cell이 생성되고, 각 grid cell마다 9개의 anchor box를 생성하므로 총 22500(=50x50x9)개의 anchor box가 생성된다.
+3. Class scores and Bounding box regressor by RPN
+RPN은 VGG16으로부터 feature map을 입력받아 anchor에 대한 class score, bounding box regressor를 반환하는 역할을 한다.
+4. Region proposal by Proposal layer
+proposal layer에서는 2번 과정에서 생성된 anchor boxes와 rpn에서 반환한 class scores와 bounding box regressor를 사용하여 region proposals를 추출하는 작업을 수행한다.
+먼저 non maximum suppression을 적용하여 부적절한 객체를 제거한 후, class xcore 상위 N개의 anchor box를 추출한다.
+이후 regression coefficients를 anchor box에 적용하여 anchor box가 객체의 위치를 더 잘 detect하도록 조정한다. 
+5. Select anchors for training RPN by Anchor target layer
+Anchor target layer의 목표는 RPN이 학습하는데 사용할 수 있는 anchor를 선택하는 것이다.
+먼저 2)번 과정에서 생성한 anchor box 중에서 원본 이미지의 경계를 벗어나지 않는 anchor box를 선택한다.
+그 다음 positive/negative 데이터를 sampling한다. 여기 positive sample은 객체가 존재하는 foreground, negative sample은 객체가 존재하지 않는 background를 의미한다.
+전체 anchor box 중에서 1) ground truth box와 가장 큰 IoU 값을 가지는 경우 2) ground truth box와의 IoU 값이 0.7 이상인 경우에 해당하는 box를 positive sample로 선정한다.
+반면 ground truth box와의 IoU 값이 0.3 이하인 경우에는 negative sample로 선정한다.
+이러한 과정을 통해 RPN을 학습시키는데 사용할 데이터셋을 구성한다.
+6. Select anchors for training Fast R-CNN by Proposal Target layer
+Proposal target layer의 목표는 proposal layer에서 나온 region proposals 중에서 Fast R-CNN 모델을 학습시키기 위한 유용한 sample을 선택하는 것이다.
+여기서 선택된 region proposals는 1)번 과정을 통해 출력된 feature map에 RoI pooling을 수행하게 된다.
+먼저 region proposals와 ground truth box와의 IoU를 계산하여 0.5 이상일 경우 positive, 0.1~0.5 사이일 경우 negative sample로 label이 된다.
+7. Max pooling by RoI pooling
+원본 이미지를 VGG16 모델에 입력하여 얻은 feature map과 6) 과정을 통해 얻은 sample을 사용하여 RoI pooling을 수행한다.
+RoI Pooling은 각 RoI가 가리키는 feature map의 일부분을 추출하고, 그것을 고정된 크기로 변환하는 과정
+

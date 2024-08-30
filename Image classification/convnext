@@ -80,6 +80,10 @@ swin transformer에서 patchify는 resnet의 첫 conv레이어와 비슷하다
 resnet의 첫 conv 레이어의 kernel 크기와 stride를 각각 7->4, 2->4 로 조정하여 swin transformer와 비슷하게 함.
 
 2.3 resnext-ify
+resnet보다 flop/정확도 트레이드오프가 더 나은 resnext의 아이디어를 채택하려고 한다.
+핵심 구성 요소는 그룹화된 컨볼루션이며, 여기서 컨볼루션 필터는 서로 다른 그룹으로 분리된다.
+높은 수준에서 resnext의 기본 원칙은 '더 많은 그룹을 사용하고 너비를 확장'하는 것이다.
+이렇게 하면 flop가 크게 줄어들기 때문에 용량 손실을 보상하기 위해 네트워크 너비가 확장된다.
 변경 이유
 resnext의 group convolution이 flops를 크게 줄이면서 accuracy는 최대한 유지할 수 있음
 depthwise convolution이 self-attention 구조에서 가중합 연산과 비슷하다고 판단(한 차원의 내에서만 정보를 혼합함)

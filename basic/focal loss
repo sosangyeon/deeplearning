@@ -1,0 +1,83 @@
+focal loss의 필요성
+object detection에는 크게 2가지 종류의 알고리즘이 있다.
+rcnn 계열의 two stage detector와 yolo, ssd 계열의 one stage detector이다.
+object detection은 여러 object들을 bounding box를 통해 위치를 찾고(localization), 어떤 물체인지 분류를 하는 작업(classification)을 한다.
+
+focal loss는 one stage detector의 정확도 성능을 개선하기 위하여 고안되었다. one-stage detector가 two stage detector에 비해 가지고 있는 문제점은 학습 중 클래스 불균형 문제가 심하다는 것이다.
+예를 들어 학습 중 배경에 대하여 박스를 친 것과 실제 객체에 대하여 박스를 친 것의 비율을 살펴보면 압도적으로 배경에 대하여 박스를 친 것이 많다는 것이다.
+학습 중에서 배경에 대한 박스를 출력하면 오류라고 학습이 되지만 그 빈도수가 너무 많다는 것이다. 빈도수가 너무 많다는 것이 학습에 방해가 된다는 뜻이다.
+이와 같은 문제점이 발생하는 이유는 dense sampling of anchor boxes(possible object locations)로 알려져 있다.
+예를 들어 retinanet에서는 각각의 pyramid layer에서 anchor box가 수천개가 추출된다.
+
+정리하면 이와 같은 클래스 불균형 문제는 다음 2가지 문제의 원인이 된다.
+1. 대부분의 location은 학습에 기여하지 않는 easy negative이므로 (detector에 의해 background로 쉽게 분류될 수 있음을 의미한다.) 학습에 비효율적이다.
+2. easy negative 각각은 높은 확률로 객체가 아님을 잘 구분할 수 있다. 즉, 각각의 loss 값은 작다. 하지만 비율이 굉장히 크므로 전체 loss 및 gradient를 계산할 때,
+easy negative의 영향이 압도적으로 커지는 문제가 발생한다.
+
+이러한 문제를 개선하기 위하여 focal loss 개념이 도입된다.
+focal loss는 간단히 말하면 cross entropy 의 클래스 불균형 문제를 다루기 위한 개선된 버전이라고 말할 수 있으며 어렵거나 쉽게 오분류되는 케이스에 대하여 
+더 큰 가중치를 주는 방법을 사용한다.
+(객체 일부분만 있거나, 실제 분류해야 되는 객체들이 이에 해당한다.)
+반대로 쉬운 케이스의 경우 낮은 가중치를 반영한다. (background object가 이에 해당한다.)
+
+cross entropy loss의 문제점
+cross entropy loss의 경우 잘 분류한 경우 보다 잘못 예측한 경우에 대하여 페널티를 부여하는 것에 초점을 둔다.
+만약 Y{actual} = 1, Y{predict} = 1 이면 CE = 0이 된다. 잘 예측했지만 보상은 없으며 단지 페널티가 사라진다.
+반면 p의 값을 0에 가깝게 예측하게 되면 CE ~ 무한대 가 된다. 즉 페널티가 굉장히 커지게 된다.
+
+Focal Loss=−(1−pt)^γlog(pt)
+focal loss와 cross entropy의 식을 비교해 보면 기본적인 cross entropy loss에 (1−pt)^γ term이 추가된 것을 확인할 수 있다.
+기본적인 cross entropy는 γ가 0이다.
+여기서 추가된 (1−pt)γ의 역할은 easy example에 사용되는 loss의 가중치를 줄이기 위함이다.
+example 1
+foreground 케이스, Y{act} = 1, Y{pred} = 0.95 -> CE : -log(0.95) = 0.05
+example 2
+background 케이스, Y{act} = 0, Y{pred} = 0.05 -> CE : -log(1-0.05) = 0.05
+
+두 케이스 모두 낮은 손실값 0.05로 잘 분류되었다.
+문제가 없어보이지만 여기서 발생하는 문제점은 foreground 케이스와 background 케이스 모두 같은 loss 값을 가진다는 것이다.
+왜냐하면 background 케이스의 수가 훨씬 더 많기 때문에 같은 비율로 loss 값이 업데이트되면 background에 대하여 학습이 훨씬 많이 될 것이고 이 작업이 누적되면
+foreground에 대한 학습량이 현저히 줄어들기 때문이다.
+
+cross entropy loss의 근본적인 문제가 foreground 대비 background의 객체가 굉장히 많이 나오는 class imbalance문제에 해당한다.
+따라서 balanced cross entropy loss의 weight w 를 이용하면 w에 대한 값의 조절을 통해 해결할 수 있을 것으로 보인다.
+즉, foreground의 weight는 크게 background의 weight는 작게 적용하는 방향으로 개선하고자 하는 것이다.
+하지만 이와 같은 방법에는 문제점이 있다. easy/hard example 구분을 할 수 없다는 점이다.
+
+Focal loss는 easy example의 weight를 줄이고 hard negative example에 대한 학습에 초점을 맞추는 cross entropy loss 함수의 확장판이라고 말할 수 있다.
+cross entropy loss 대비 loss에 곱해지는 항인 (1-Y{pred})^γ 에서 γ의 값을 잘 조절해야 좋은 성능을 얻을 수 있다.
+추가적으로 전체적인 loss 값을 조절하는 a값 또한 논문에서 사용되어 a, γ값을 조절하여 어떤 값이 좋은 성능을 가졌는지 보여준다.
+
+γ가 커질수록 easy example에 대한 loss가 크게 줄어들며 easy example에 대한 범위도 더 커진다.
+
+다중 분류 크로스 엔트로피
+𝑌{act} : 원핫 인코딩으로 표현, 예를 들어, 클래스가 3개(C1, C2, C3)인 경우, 실제 클래스가 C2라면 𝑌{act}는 [0, 1, 0]이다.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
